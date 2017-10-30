@@ -1,0 +1,177 @@
+---
+title: "TweetAnalysis"
+author: "Jojo"
+date: "30 October 2017"
+output: html_document
+---
+In 2016, the Government of India launched a demonetization policy which took 85% of Indian rupees out of circulation. The move was designed as a means of cracking down on "black money" and took everyone by surprise (to put it mildly). In the days that followed Indians took to Twitter en-masse to express their feelings. Many experts say demonetization was very unpoular while others say it was well received
+
+What is Twitter's veridct?
+
+```{r setup, include=FALSE}
+
+setwd("F:\\DataMining_R\\3_LectureData\\test\\gitExample")
+#my working folder
+
+## I will be working with a pre-existing tweets avlaiable on the
+## Kaggle webiste
+
+d=read.csv("demonetization-tweets.csv")
+
+head(d)
+
+
+```
+
+Lets read in the R packages
+
+```{r}
+################## work with word clouds
+library(ggplot2)
+library(tm) #text data cleaning. Needs the NLP package too
+library(readr)
+library(wordcloud)
+library(plyr)
+library(lubridate)
+
+require(SnowballC) #used for sentiment analysis and wordclouds
+```
+
+Let's build a wordlcloud- tool for capturing the most dominant word/
+sentiment
+
+First we clean the text by removing the punctuations and build a corpus
+
+```{r}
+text <- as.character(d$text)
+
+## Lets clean the text by removing punctutation, white spaces
+
+sample <- sample(text, (length(text)))
+corpus <- Corpus(VectorSource(list(sample)))
+corpus <- tm_map(corpus, removePunctuation)
+corpus <- tm_map(corpus, content_transformer(tolower)) #convert to lower case
+corpus <- tm_map(corpus, removeNumbers)
+corpus <- tm_map(corpus, stripWhitespace)
+corpus <- tm_map(corpus, removeWords, stopwords('english'))
+#we are only interested in the English tweets so we remove all
+#English stopwords
+corpus <- tm_map(corpus, stemDocument)
+dtm_up <- DocumentTermMatrix(VCorpus(VectorSource(corpus[[1]]$content)))
+
+freq_up <- colSums(as.matrix(dtm_up)) #frequent terms
+
+head(freq_up)
+
+```
+
+Now lets analyze the sentiment underpinning the tweets
+
+```{r}
+require(RSentiment)
+
+sentiments_up <- calculate_sentiment(names(freq_up))
+#Analyses sentiment of a sentence in English and assigns score to sentiment
+
+sentiments_up <- cbind(sentiments_up, as.data.frame(freq_up))
+sent_pos_up <- sentiments_up[sentiments_up$sentiment=='Positive',]
+sent_neg_up <- sentiments_up[sentiments_up$sentiment=='Negative',]
+cat("Negative sentiments: ",sum(sent_neg_up$freq_up)," Positive sentiments: ",sum(sent_pos_up$freq_up))
+```
+
+The wordcloud
+
+```{r}
+#WC for positive words
+wordcloud(sent_pos_up$text,sent_pos_up$freq,min.freq=5,random.order=FALSE,colors=brewer.pal(6,"Dark2"))
+
+```
+
+```{r}
+##for the neagtive words
+wordcloud(sent_neg_up$text,sent_neg_up$freq,min.freq=5,random.order=FALSE,colors=brewer.pal(6,"Dark2"))
+
+```
+
+Let's explore more
+
+```{r}
+d=read.csv("demonetization-tweets.csv")
+
+head(d)
+
+d$created_date=as.Date(d$created,format='%Y-%m-%d %H:%M:%S')
+#convert created to date format
+
+d$hour = format(as.POSIXct(d$created,format="%Y-%m-%d %H:%M:%S"),"%H")
+#Extract Hour from the date
+#POSIXlt" and "POSIXct" representing calendar dates and times.
+
+d$isRetweetNum=ifelse(d$isRetweet==FALSE,0,1)
+#Numerical variable to indicate whether a tweet was retweet
+
+d$retweetedNum=ifelse(d$retweeted==FALSE,0,1)
+#Total number of times a tweet was tetweeted
+
+d$tweets=c(1)#Additional column that will help us in summing up total tweets
+
+```
+
+Who were the most popular users and who received the most replies
+
+```{r}
+## identify the popular users
+y=ddply(d, .(screenName), numcolwise(sum))
+popularUsers=y[,c("screenName","retweetCount","tweets")]
+popularUsers=popularUsers[order(-popularUsers$retweetCount),]
+popularUsers=head(popularUsers,n=10)
+popularUsers
+
+```
+
+Who received the most replies
+
+```{r}
+
+#who received the most replies
+Replies=d[is.na(d$replyToSN)==FALSE,]
+y=ddply(Replies, .(replyToSN), numcolwise(sum))
+Replies=y[,c("replyToSN","tweets")]
+Replies=Replies[order(-Replies$tweet),]
+Replies=head(Replies,n=20)
+colnames(Replies)=c("User","RepliesReceived")
+Replies
+```
+
+SENTIMENT ANALYSIS
+
+```{r}
+## carry out text data cleaning-gsub
+some_txt<-gsub("(RT|via)((?:\\b\\w*@\\w+)+)","",d$text)
+some_txt<-gsub("http[^[:blank:]]+","",some_txt)
+some_txt<-gsub("@\\w+","",some_txt)
+some_txt<-gsub("[[:punct:]]"," ",some_txt)
+some_txt<-gsub("[^[:alnum:]]"," ",some_txt)
+
+require(syuzhet)
+tweetSentiment <- get_nrc_sentiment(some_txt)
+#syuzhet pkg
+#Calls the NRC sentiment dictionary to calculate the presence of 
+#eight different emotions and their corresponding valence in a text file.
+
+```
+
+Visualization
+
+```{r}
+require(ggplot2)
+Sentimentscores<-data.frame(colSums(tweetSentiment[,]))
+names(Sentimentscores)<-"Score"
+SentimentScores<-cbind("sentiment"=rownames(Sentimentscores),Sentimentscores)
+rownames(SentimentScores)<-NULL
+ggplot(data=SentimentScores,aes(x=sentiment,y=Score))+geom_bar(aes(fill=sentiment),stat = "identity")+
+  theme(legend.position="none")+
+  xlab("Sentiments")+ylab("scores")+ggtitle("Total sentiment based on scores")
+
+```
+
