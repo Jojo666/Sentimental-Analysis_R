@@ -6,3 +6,7 @@ In 2016, the Government of India launched a demonetization policy which took 85%
 
 
 What is Twitter's veridct?
+
+Well the Twitter jury is out and the Twitter sentiment has been...........
+
+
